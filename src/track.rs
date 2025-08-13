@@ -1,9 +1,6 @@
 use std::{ffi::OsStr, path::PathBuf, time::Duration};
 
-use lofty::{
-    file::{AudioFile, TaggedFileExt},
-    tag::Accessor,
-};
+use lofty::file::{AudioFile, TaggedFileExt};
 use walkdir::WalkDir;
 
 #[allow(unused)]
@@ -15,10 +12,10 @@ pub struct Track {
     pub album_artist: Option<String>,
     pub artist: Option<String>,
     pub duration: Option<Duration>,
-    pub disc: Option<u32>,
-    pub disc_total: Option<u32>,
-    pub track: Option<u32>,
-    pub track_total: Option<u32>,
+    pub disc: Option<String>,
+    pub disc_total: Option<String>,
+    pub track: Option<String>,
+    pub track_total: Option<String>,
     pub cover: Option<Vec<u8>>,
 }
 
@@ -46,11 +43,8 @@ impl Track {
 /// # Returns
 ///
 /// A `Result` which is:
-/// - `Ok(Vec<TrackInfo>)` containing a list of `TrackInfo` for all music files found.
-/// - `Err(std::io::Error)` if an I/O error occurs during directory traversal.
-pub fn scan_tracks(path: &std::path::Path) -> std::io::Result<Vec<Track>> {
-    let mut list: Vec<Track> = vec![];
-
+/// - `Vec<PathBuf>` containing a list of `PathBuf` for all music files found.
+pub fn scan_tracks(path: &std::path::Path) -> Vec<PathBuf> {
     let walker = WalkDir::new(path)
         .follow_links(true)
         .into_iter()
@@ -62,22 +56,13 @@ pub fn scan_tracks(path: &std::path::Path) -> std::io::Result<Vec<Track>> {
                     Some("flac" | "mp3" | "wav")
                 )
         });
-
-    for entry in walker {
-        if let Ok(track) = read_track_metadata(entry.path()) {
-            list.push(track);
-        }
-    }
-
-    Ok(list)
+    walker.map(|entry| entry.path().to_owned()).collect()
 }
 
 /// Reads metadata from a music file.
 ///
 /// This function attempts to read metadata from file
-/// using the `lofty` crate. It returns a `Result` to indicate whether the
-/// operation was successful and an `Option<Track>` to represent if a primary tag
-/// was found within the file.
+/// using the `lofty` crate.
 ///
 /// # Arguments
 ///
@@ -86,9 +71,7 @@ pub fn scan_tracks(path: &std::path::Path) -> std::io::Result<Vec<Track>> {
 /// # Returns
 ///
 /// A `Result<Option<Track>, lofty::error::LoftyError>`:
-/// - `Ok(Some(Track))` if the file is a supported music format and a primary tag
-///   with metadata was successfully read.
-/// - `Ok(None)` if the file is not a supported music format (based on its extension).
+/// - `Ok(Track)` if the file can be read by lofty.
 /// - `Err(lofty::error::LoftyError)` if an error occurred while reading the music file
 ///   or its tags
 pub fn read_track_metadata(
@@ -115,10 +98,18 @@ pub fn read_track_metadata(
             artist: tag
                 .get_string(&lofty::tag::ItemKey::TrackArtist)
                 .map(String::from),
-            disc: tag.disk(),
-            disc_total: tag.disk_total(),
-            track: tag.track(),
-            track_total: tag.track_total(),
+            disc: tag
+                .get_string(&lofty::tag::ItemKey::DiscNumber)
+                .map(String::from),
+            disc_total: tag
+                .get_string(&lofty::tag::ItemKey::DiscTotal)
+                .map(String::from),
+            track: tag
+                .get_string(&lofty::tag::ItemKey::TrackNumber)
+                .map(String::from),
+            track_total: tag
+                .get_string(&lofty::tag::ItemKey::TrackTotal)
+                .map(String::from),
             duration: Some(tagged.properties().duration()),
             cover: None,
         },
